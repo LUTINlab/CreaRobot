@@ -8,7 +8,7 @@
 
 Pour garantir une interaction fluide, les capteurs sont côté PC et indépendants du robot : micro intégré du PC et caméra USB externe. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
-![Architecture du système CreaRobot](docs/figures/Architecture_système_CreaRobot.png)
+![Architecture du système CreaRobot](docs/figures/architecture_système.png)
 
 | Couche | Node | Rôle |
 |---|---|---|
