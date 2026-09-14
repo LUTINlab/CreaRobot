@@ -27,6 +27,10 @@
 \titlespacing*{\paragraph}
   {0pt}{2.5ex plus 1ex minus .2ex}{0.8ex}
 
+\renewcommand{\contentsname}{Table des matières}
+\renewcommand{\listfigurename}{Table des figures}
+\renewcommand{\listtablename}{Liste des tableaux}
+
 
 \geometry{margin=2.5cm}
 \sloppy
@@ -150,7 +154,7 @@ Un robot social se distingue d'un robot industriel ou fonctionnel par sa capacit
 
 \subsubsection{La créativité et le test TCT-DP}
 
-La créativité peut se définir comme la capacité à produire quelque chose à la fois nouveau, donc original, et adapté au contexte dans lequel il est produit, donc pertinent \cite{lubart2003}. Cette double exigence rend son évaluation délicate, en particulier dans une tâche graphique ouverte comme celle proposée dans ce projet, où il n'existe pas de bonne ou de mauvaise réponse. C'est pour répondre à cette difficulté que le TCT-DP a été conçu : un instrument dont la validité pour évaluer la créativité à partir d'une production graphique a été établie et largement reprise depuis \cite{urbanjellen1996,urban2005}. Le test lui-même, ainsi que ses critères de cotation, sont détaillés dans la partie Méthode (section~\ref{sec:protocole}).
+La créativité peut se définir comme la capacité à produire quelque chose à la fois nouveau, donc original, et adapté au contexte dans lequel il est produit, donc pertinent \cite{lubart2003}. Cette double exigence rend son évaluation délicate, en particulier dans une tâche graphique ouverte comme celle proposée dans ce projet, où il n'existe pas de bonne ou de mauvaise réponse. C'est pour répondre à cette difficulté que le TCT-DP a été conçu : un instrument largement réutilisé et dont la validité pour évaluer la créativité à partir d'une production graphique a été établie \cite{urbanjellen1996,urban2005}. Le test lui-même, ainsi que ses critères de cotation, sont détaillés dans la partie Méthode (section~\ref{sec:protocole}).
 
 \subsubsection{État de l'art : robots sociaux dans des protocoles expérimentaux}
 
@@ -421,6 +425,15 @@ Le système est organisé en trois couches : une couche logique qui pilote le d�
     \includegraphics[width=\textwidth]{figures/architecture_système.png}
     \caption{Architecture logicielle du système CreaRobot : nœuds et répartition matérielle.}
     \label{fig:archi_systeme}
+\end{figure}
+
+La figure~\ref{fig:rosgraph} complète ce schéma avec le détail des topics ROS\,2 échangés entre ces nœuds.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/rosgraph.png}
+    \caption{Graphe des topics ROS\,2 échangés entre les nœuds du système.}
+    \label{fig:rosgraph}
 \end{figure}
 
 Chaque nœud est détaillé ci-après dans l'ordre de la chaîne de décision : d'abord l'orchestrateur, qui décide de la phase en cours, puis l'interaction, qui la traduit en actions, puis le cerveau LLM, qui génère le contenu, puis la passerelle qui relaie tout cela au robot ; viennent ensuite les nœuds de perception, puis le système de lancement et la journalisation.
