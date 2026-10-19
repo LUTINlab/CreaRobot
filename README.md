@@ -14,7 +14,7 @@ Pour garantir une interaction fluide, les capteurs sont côté PC et indépendan
 |---|---|---|
 | Logique | `orchestrator_node` | Machine à états — 7 phases TCT-DP |
 | Dispatcher | `interaction_node` | Traduit les phases en actions (gestes / émotions / parole) |
-| Audition | `stt_node` | Capture micro local + STT local (Faster-Whisper) |
+| Audition | `stt_node` | Capture micro local + STT local (Whisper : MLX sur Mac Apple Silicon, Faster-Whisper sur PC) |
 | Vision | `vision_node` | Flux local via caméra USB externe |
 | Vision démo | `vision_node_temp` | Mode Science Infuse : capture d'écran HDMI (via mss) |
 | Détection dessin | `drawing_detector_node` | Détecte la fin du dessin par frame differencing + médiane glissante |
@@ -64,7 +64,9 @@ Adresse IP de QTRP sur le réseau :
 
 ## Installation
 
-### Sur le PC - ROS 2 Humble / Python 3.10
+Le projet tourne sur PC Linux (ROS 2 Humble) ou sur Mac Apple Silicon (ROS 2 Jazzy via RoboStack). Seul le moteur de reconnaissance vocale diffère : `stt_node` choisit automatiquement MLX (GPU Metal) sur Mac Apple Silicon et Faster-Whisper ailleurs. Pour forcer un moteur : `export CREAROBOT_STT_BACKEND=mlx` ou `faster_whisper`.
+
+### Sur PC (Linux) - ROS 2 Humble / Python 3.10
 
 #### Dépendances
 
@@ -78,7 +80,7 @@ sudo apt install ros-humble-cv-bridge
 Le nœud STT tente de charger Whisper sur GPU (CUDA) au démarrage, avec fallback automatique sur CPU si indisponible. Vérifier que les drivers NVIDIA sont installés (`nvidia-smi`), puis ajouter dans `~/.bashrc` :
 
 ```bash
-export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/lib:$HOME/.local/lib/python3.10/site-packages/nvietdia/cudnn/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/lib:$HOME/.local/lib/python3.10/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
 ```
 
 #### Configuration du Micro
@@ -90,6 +92,31 @@ Listez vos sources : `pactl list short sources`
 ```bash
 pactl set-default-source "NOM_DU_PERIPHERIQUE"
 ```
+
+### Sur Mac Apple Silicon - ROS 2 Jazzy (RoboStack) / Python 3.11
+
+#### Environnement ROS 2 (conda)
+
+```bash
+conda create -n ros_env -c conda-forge -c robostack-jazzy python=3.11 ros-jazzy-desktop ros-jazzy-cv-bridge colcon-common-extensions
+conda activate ros_env
+pip install roslibpy openai opencv-python "numpy==1.26.4" sounddevice mss
+```
+
+#### Whisper MLX (venv séparé)
+
+MLX ne fonctionne pas dans l'environnement conda : `stt_node` lance Whisper dans un sous-processus (`mlx_worker.py`) avec le Python d'un venv dédié, par défaut `~/.crearobot_mlx` (surchargeable via `MLX_PYTHON`).
+
+```bash
+/usr/bin/python3 -m venv ~/.crearobot_mlx
+~/.crearobot_mlx/bin/pip install mlx-whisper
+```
+
+Le modèle `whisper-small-mlx` est téléchargé au premier lancement. Le micro utilisé est celui défini par défaut dans les Réglages Système (Son → Entrée).
+
+#### Condition C2
+
+Pour charger la feuille TCT-DP comme modèle de génération : `brew install poppler` (fournit `pdftoppm`).
 
 ---
 
@@ -105,8 +132,10 @@ Activer dans l'autostart ros_bridge et motor :
 
 ```bash
 colcon build
-source install/setup.bash
+source install/setup.bash   # sur Mac : source install/setup.zsh
 ```
+
+Sur Mac, `./run.sh` active `ros_env` et lance l'infrastructure et l'orchestrateur en une commande.
 
 #### Méthode principale (recommandée)
 
