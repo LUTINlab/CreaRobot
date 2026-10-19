@@ -1,11 +1,18 @@
+import os
+import json
+import struct
+import subprocess
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from faster_whisper import WhisperModel
 import numpy as np
 import sounddevice as sd
 import time
+
+# Python du venv où mlx fonctionne (surchargeable via la variable d'environnement MLX_PYTHON)
+MLX_PYTHON = os.environ.get("MLX_PYTHON", os.path.expanduser("~/.crearobot_mlx/bin/python"))
+WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mlx_worker.py")
 
 
 class STTNode(Node):
@@ -14,20 +21,34 @@ class STTNode(Node):
         _latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.pub = self.create_publisher(String, '/pc/stt/transcript', 10)
         self.create_subscription(Bool, '/pc/stt/enable', self.enable_callback, _latched)
-        self.create_subscription(Bool, '/pc/robot/speaking',  self.speaking_callback, 10)
+        self.create_subscription(Bool, '/pc/robot/speaking', self.speaking_callback, 10)
 
-        self.enabled         = False
-        self.robot_speaking  = False  # prioritaire sur enabled
-        self.audio_buffer    = []
+        self.enabled          = False
+        self.robot_speaking   = False  # prioritaire sur enabled
+        self.audio_buffer     = []
         self._mic_open_logged = False
 
-        try:
-            self.model = WhisperModel("small", device="cuda", compute_type="float16")
-            self.get_logger().info("--- WHISPER GPU PRET ---")
-        except Exception:
-            self.get_logger().warning("GPU non disponible — fallback CPU")
-            self.model = WhisperModel("base", device="cpu", compute_type="int8")
-            self.get_logger().info("--- WHISPER CPU PRET ---")
+        self.get_logger().info("Démarrage du worker Whisper MLX...")
+        # Environnement propre : sans les variables de ROS/conda qui perturbent le venv
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PYTHONPATH", "PYTHONHOME") and not k.startswith("DYLD_")}
+        self.worker = subprocess.Popen(
+            [MLX_PYTHON, WORKER_PATH],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env,
+        )
+        line = self.worker.stdout.readline()
+        if not line or not json.loads(line).get("ready"):
+            raise RuntimeError("Le worker MLX n'a pas démarré (voir les erreurs ci-dessus)")
+        self.get_logger().info("--- WHISPER MLX (METAL) PRET ---")
+
+    def _transcribe(self, audio):
+        self.worker.stdin.write(struct.pack("<I", len(audio)))
+        self.worker.stdin.write(audio.tobytes())
+        self.worker.stdin.flush()
+        line = self.worker.stdout.readline()
+        if not line:
+            raise RuntimeError("Le worker MLX s'est arrêté")
+        return json.loads(line)
 
     @property
     def _listening(self):
@@ -72,33 +93,34 @@ class STTNode(Node):
         if not self._listening or not self.audio_buffer:
             return
 
-        recording = np.concatenate(self.audio_buffer, axis=0).flatten()
+        recording = np.concatenate(self.audio_buffer, axis=0).flatten().astype(np.float32)
         if len(recording) < 16000 * 0.5:
             return
 
         try:
             t0 = time.time()
-            segments, _ = self.model.transcribe(recording, language="fr", vad_filter=True)
+            result = self._transcribe(recording)
+            if "error" in result:
+                self.get_logger().error(f"Erreur transcription : {result['error']}")
+                self.audio_buffer = []
+                return
 
-            full_text = ""
-            last_end  = 0
-            for segment in segments:
-                full_text += segment.text
-                last_end   = segment.end
+            full_text = result["text"].strip()
+            segments = result["segments"]
+            last_end = segments[-1]["end"] if segments else 0
 
-            duration_total  = len(recording) / 16000
-            silence_at_end  = duration_total - last_end
+            duration_total = len(recording) / 16000
+            silence_at_end = duration_total - last_end
 
-            if full_text.strip() and silence_at_end > 0.9:
-                final_text = full_text.strip()
-                if self._is_hallucination(final_text):
-                    self.get_logger().warning(f"[HALLUCINATION filtrée] {final_text}")
+            if full_text and silence_at_end > 0.9:
+                if self._is_hallucination(full_text):
+                    self.get_logger().warning(f"[HALLUCINATION filtrée] {full_text}")
                     self.audio_buffer = []
                     return
                 self.get_logger().info(f"[LATENCE] Whisper transcription : {time.time() - t0:.2f} s")
-                self.get_logger().info(f"Phrase detectee : {final_text}")
+                self.get_logger().info(f"Phrase detectee : {full_text}")
                 msg = String()
-                msg.data = final_text
+                msg.data = full_text
                 self.pub.publish(msg)
                 self.audio_buffer = []
 
@@ -110,10 +132,12 @@ def main(args=None):
     rclpy.init(args=args)
     node = STTNode()
 
-    with sd.InputStream(samplerate=16000, channels=1, callback=node.audio_callback):
-        while rclpy.ok():
-            rclpy.spin_once(node, timeout_sec=0.1)
-            node.process_live()
-
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        with sd.InputStream(samplerate=16000, channels=1, callback=node.audio_callback):
+            while rclpy.ok():
+                rclpy.spin_once(node, timeout_sec=0.1)
+                node.process_live()
+    finally:
+        node.worker.terminate()
+        node.destroy_node()
+        rclpy.shutdown()
