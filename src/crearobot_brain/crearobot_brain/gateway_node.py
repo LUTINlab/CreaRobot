@@ -16,7 +16,7 @@ class GatewayNode(Node):
         self.ts = TaskSynchronizer()
 
         # Connexion au robot (ROS 1)    
-        self.get_logger().info(f'Connexion au robot QT')
+        self.get_logger().info('Connexion au robot QT')
         self.ros1_client = roslibpy.Ros(host="192.168.24.118", port=9091)
         self.ros1_client.run()
 

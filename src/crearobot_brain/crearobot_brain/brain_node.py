@@ -263,7 +263,7 @@ class BrainNode(Node):
             self.get_logger().info("Image generee et envoyee au projecteur")
 
             if self._addressing_user_input:
-                text = f"J'ai entendu ce que tu m'as dit. Voilà ce que j'ai essayé à partir de ton dessin !"
+                text = "J'ai entendu ce que tu m'as dit. Voilà ce que j'ai essayé à partir de ton dessin !"
                 self._addressing_user_input = None
             else:
                 text = "Voilà, j'ai essayé quelque chose à partir de ton dessin !"

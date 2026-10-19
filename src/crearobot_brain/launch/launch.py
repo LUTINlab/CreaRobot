@@ -1,6 +1,5 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import TimerAction
 from crearobot_brain import config
 
 def generate_launch_description():
@@ -30,13 +29,14 @@ def generate_launch_description():
     )
 
     
-    # Vision (Capture Caméra) Semaine science infuse
-    vision_temp = Node(
-        package='crearobot_brain',
-        executable='vision_temp',
-        name='vision_node_temp',
-        output='screen'
-    )
+    # Vision (Capture écran HDMI) Semaine science infuse
+    # Pour l'utiliser, décommenter et remplacer `vision` par `vision_temp` dans nodes_to_run
+    # vision_temp = Node(
+    #     package='crearobot_brain',
+    #     executable='vision_temp',
+    #     name='vision_node_temp',
+    #     output='screen'
+    # )
     
 
     # STT (Oreilles - Micro USB)

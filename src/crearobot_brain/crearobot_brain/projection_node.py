@@ -6,7 +6,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-import subprocess
+import mss
 import os
 import datetime
 
@@ -18,7 +18,6 @@ class ProjectionNode(Node):
         self.bridge = CvBridge()
 
         # --- CONFIGURATION ---
-        self.projector_x_offset = 3072  # largeur de l'écran principal (3072x1728)
         self.window_name = "Projection_QT"
         self.current_image = None
         self._generated_dir = None
@@ -27,9 +26,13 @@ class ProjectionNode(Node):
 
         # --- DÉPLOIEMENT FENÊTRE ---
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-        if self.is_projector_connected():
-            self.get_logger().info("Projecteur détecté. Déploiement plein écran...")
-            cv2.moveWindow(self.window_name, self.projector_x_offset, 0)
+        projector = self.find_projector()
+        if projector is not None:
+            self.get_logger().info(
+                f"Projecteur détecté ({projector['width']}x{projector['height']} "
+                f"en {projector['left']},{projector['top']}). Déploiement plein écran..."
+            )
+            cv2.moveWindow(self.window_name, projector['left'], projector['top'])
             cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
             self.get_logger().warning("Projecteur NON DÉTECTÉ — fenêtre sur écran principal.")
@@ -44,7 +47,7 @@ class ProjectionNode(Node):
         # Timer pour rafraîchir l'image (20 FPS)
         self.gui_timer = self.create_timer(0.05, self.update_gui)
 
-        self.get_logger().info(f"Projection initialisée sur le projecteur (Offset: {self.projector_x_offset})")
+        self.get_logger().info("Projection initialisée")
 
     def _on_session_dir(self, msg):
         if self._generated_dir is not None:
@@ -53,14 +56,19 @@ class ProjectionNode(Node):
         os.makedirs(self._generated_dir, exist_ok=True)
         self.get_logger().info(f"Dossier dessins générés : {self._generated_dir}")
 
-    def is_projector_connected(self):
-        """ Vérifie via xrandr si un écran est connecté en plus de l'écran principal """
+    def find_projector(self):
+        """ Renvoie la géométrie du second écran (projecteur), ou None s'il n'y en a pas.
+        mss lit les écrans sur Linux (X11) comme sur macOS ; l'écran principal est en (0, 0). """
         try:
-            output = subprocess.check_output("xrandr | grep ' connected'", shell=True).decode()
-            screens = output.strip().split('\n')
-            return len(screens) > 1 # Vrai s'il y a plus d'un écran
-        except:
-            return False
+            with (getattr(mss, "MSS", None) or mss.mss)() as sct:
+                screens = sct.monitors[1:]  # monitors[0] = bureau virtuel entier
+        except Exception as e:
+            self.get_logger().warning(f"Lecture des écrans impossible : {e}")
+            return None
+        if len(screens) < 2:
+            return None
+        others = [m for m in screens if (m['left'], m['top']) != (0, 0)]
+        return others[0] if others else screens[1]
 
     def image_callback(self, msg):
         try:
