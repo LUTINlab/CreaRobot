@@ -95,17 +95,37 @@ pactl set-default-source "NOM_DU_PERIPHERIQUE"
 
 ### Sur Mac Apple Silicon - ROS 2 Jazzy (RoboStack) / Python 3.11
 
-#### Environnement ROS 2 (conda)
+> Une fois `ros_env` activé, `PYTHONPATH` pointe vers les paquets de l'environnement et fait planter `conda` (`ImportError: cannot import name 'ArgsKwargs'`) : préfixer chaque commande `conda install` par `PYTHONPATH=`.
+
+#### 1. Environnement conda RoboStack
 
 ```bash
-conda create -n ros_env -c conda-forge -c robostack-jazzy python=3.11 ros-jazzy-desktop ros-jazzy-cv-bridge colcon-common-extensions
+conda create -n ros_env -c conda-forge --override-channels python=3.11
 conda activate ros_env
-pip install roslibpy openai opencv-python "numpy==1.26.4" sounddevice mss
+conda config --env --add channels conda-forge
+conda config --env --add channels robostack-jazzy
+conda config --env --set channel_priority strict
 ```
 
-#### Whisper MLX (venv séparé)
+#### 2. ROS 2 et PyAV (conda)
 
-MLX ne fonctionne pas dans l'environnement conda : `stt_node` lance Whisper dans un sous-processus (`mlx_worker.py`) avec le Python d'un venv dédié, par défaut `~/.crearobot_mlx` (surchargeable via `MLX_PYTHON`).
+`av` (dépendance de faster-whisper) doit venir de conda pour utiliser le même `ffmpeg` que le reste de l'environnement : l'installer avant le `pip install` évite que pip installe sa propre version.
+
+```bash
+PYTHONPATH= conda install ros-jazzy-desktop ros-jazzy-cv-bridge av
+```
+
+#### 3. Dépendances Python (pip)
+
+Pas de paquets `nvidia-*` sur Mac (ils n'existent pas pour macOS et font échouer l'installation). `faster-whisper` ne sert que de moteur STT de secours (`CREAROBOT_STT_BACKEND=faster_whisper`).
+
+```bash
+pip install roslibpy openai opencv-python "numpy==1.26.4" sounddevice mss faster-whisper colcon-common-extensions
+```
+
+#### 4. Whisper MLX (venv séparé)
+
+MLX ne fonctionne pas dans l'environnement conda : `stt_node` lance Whisper dans un sous-processus (`mlx_worker.py`) avec le Python d'un venv dédié, par défaut `~/.crearobot_mlx` (surchargeable via `MLX_PYTHON`). Sans ce venv, `stt_node` ne démarre pas.
 
 ```bash
 /usr/bin/python3 -m venv ~/.crearobot_mlx
@@ -113,6 +133,14 @@ MLX ne fonctionne pas dans l'environnement conda : `stt_node` lance Whisper dans
 ```
 
 Le modèle `whisper-small-mlx` est téléchargé au premier lancement. Le micro utilisé est celui défini par défaut dans les Réglages Système (Son → Entrée).
+
+#### 5. Configuration
+
+```bash
+cp src/crearobot_brain/crearobot_brain/config.py.example src/crearobot_brain/crearobot_brain/config.py
+```
+
+Renseigner dans `config.py` au minimum `OPENAI_API_KEY`, `CAMERA_INDEX`, `CONDITION` et `TEST_SHEET_VERSION`. Compiler ensuite (`colcon build` puis `source install/setup.zsh`, voir [Mise en route](#mise-en-route)).
 
 #### Condition C2
 
